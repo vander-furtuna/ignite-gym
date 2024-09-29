@@ -53,15 +53,6 @@ export function AppRoutes() {
         }}
       />
       <Screen
-        name="profile"
-        component={Profile}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <ProfileIcon fill={color} width={iconSize} height={iconSize} />
-          ),
-        }}
-      />
-      <Screen
         name="history"
         component={History}
         options={{
@@ -70,6 +61,16 @@ export function AppRoutes() {
           ),
         }}
       />
+      <Screen
+        name="profile"
+        component={Profile}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <ProfileIcon fill={color} width={iconSize} height={iconSize} />
+          ),
+        }}
+      />
+
       <Screen
         name="exercise"
         component={Exercise}

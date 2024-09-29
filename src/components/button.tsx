@@ -34,6 +34,7 @@ export function Button({
         <Text
           color={variant === 'solid' ? '$white' : '$green500'}
           fontFamily="$body"
+          fontWeight="bold"
         >
           {label}
         </Text>
