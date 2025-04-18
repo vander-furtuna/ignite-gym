@@ -16,7 +16,9 @@ import { gluestackUIConfig } from '../../config/gluestack-ui.config'
 type AppRoutes = {
   home: undefined
   profile: undefined
-  exercise: undefined
+  exercise: {
+    exerciseId: number
+  }
   history: undefined
 }
 

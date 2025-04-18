@@ -1,8 +1,10 @@
+import defaultUserImg from '@assets/userPhotoDefault.png'
 import { Button } from '@components/button'
 import { Input } from '@components/input'
 import { ScreenHeader } from '@components/screen-header'
 import { ToastMessage } from '@components/toast-message'
 import { UserPhoto } from '@components/user-photo'
+import { useAuth } from '@contexts/auth'
 import {
   Center,
   Heading,
@@ -11,12 +13,131 @@ import {
   useToast,
   VStack,
 } from '@gluestack-ui/themed'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { api } from '@services/api'
+import { updateAvatar } from '@services/user/update-avatar'
+import { updateUser } from '@services/user/update-user'
+import { useMutation } from '@tanstack/react-query'
+import { AppError } from '@utils/app-error'
 import * as FileSystem from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
+import { Controller, useForm } from 'react-hook-form'
 import { TouchableOpacity } from 'react-native'
+import { z } from 'zod'
+
+const editProfileFormSchema = z
+  .object({
+    name: z.string({
+      required_error: 'Nome é obrigatório',
+    }),
+    email: z.string().email().optional(),
+
+    oldPassword: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (value === '') {
+          return undefined
+        }
+
+        return value
+      }),
+    newPassword: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (value === '') {
+          return undefined
+        }
+
+        return value
+      }),
+    newPasswordConfirmation: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (value === '') {
+          return undefined
+        }
+
+        return value
+      }),
+  })
+  .refine(
+    (data) => {
+      if (data.newPassword || data.newPasswordConfirmation) {
+        return !!data.oldPassword
+      }
+
+      return true
+    },
+    {
+      message: 'Para alterar a senha, informe a senha antiga e a nova senha',
+      path: ['oldPassword'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.newPassword) {
+        return data.newPassword === data.newPasswordConfirmation
+      }
+
+      return true
+    },
+    {
+      message: 'As senhas não são iguais',
+      path: ['newPasswordConfirmation'],
+    },
+  )
+
+type EditProfileFormData = z.infer<typeof editProfileFormSchema>
 
 export function Profile() {
   const toast = useToast()
+  const { user, updateUserName, updateUserAvatar } = useAuth()
+  const { control, handleSubmit } = useForm<EditProfileFormData>({
+    resolver: zodResolver(editProfileFormSchema),
+    defaultValues: {
+      name: user.name,
+      email: user.email,
+    },
+  })
+
+  const { mutateAsync: updateUserFn, isPending } = useMutation({
+    mutationFn: updateUser,
+    onSuccess: (_, { name }) => {
+      updateUserName(name)
+      toast.show({
+        placement: 'bottom',
+        render: ({ id }) => (
+          <ToastMessage
+            id={id}
+            title="Sucesso"
+            description="Perfil atualizado com sucesso"
+            action="success"
+            onClose={() => toast.close(id)}
+          />
+        ),
+      })
+    },
+    onError: (error) => {
+      toast.show({
+        placement: 'bottom',
+        render: ({ id }) => (
+          <ToastMessage
+            id={id}
+            title={
+              error instanceof AppError
+                ? error.message
+                : 'Não foi possível atualizar o perfil'
+            }
+            action="error"
+            onClose={() => toast.close(id)}
+          />
+        ),
+      })
+    },
+  })
 
   async function handleUserPhotoSelect() {
     try {
@@ -29,10 +150,12 @@ export function Profile() {
 
       if (selectedPhoto.canceled) return
 
-      const { uri } = selectedPhoto.assets[0]
+      const photoSelected = selectedPhoto.assets[0]
 
-      if (uri) {
-        const photoInfo = (await FileSystem.getInfoAsync(uri)) as {
+      if (photoSelected.uri) {
+        const photoInfo = (await FileSystem.getInfoAsync(
+          photoSelected.uri,
+        )) as {
           size: number
         }
 
@@ -50,10 +173,52 @@ export function Profile() {
             ),
           })
         }
+
+        const fileExtension = photoSelected.uri.split('.').pop()
+
+        const photoFile = {
+          name: `${user.name}.${fileExtension}`
+            .toLocaleLowerCase()
+            .replace(/ /g, '_'),
+          uri: photoSelected.uri,
+          type: `${photoSelected.type}/${fileExtension}`,
+        } as any
+
+        const userPhotoUploadForm = new FormData()
+
+        // const photoBlob = await (await fetch(photoFile.uri)).blob()
+        userPhotoUploadForm.append('avatar', photoFile)
+        const { avatar } = await updateAvatar(userPhotoUploadForm)
+        updateUserAvatar(`${api.defaults.baseURL}/avatar/${avatar}`)
+        console.log(avatar)
+        toast.show({
+          placement: 'bottom',
+          render: ({ id }) => (
+            <ToastMessage
+              id={id}
+              title="Sucesso"
+              description="Foto de perfil atualizada com sucesso"
+              action="success"
+              onClose={() => toast.close(id)}
+            />
+          ),
+        })
       }
     } catch (error) {
       console.error(error)
     }
+  }
+
+  const handleProfileUpdate = async ({
+    name,
+    newPassword,
+    oldPassword,
+  }: EditProfileFormData) => {
+    await updateUserFn({
+      name,
+      password: newPassword,
+      old_password: oldPassword,
+    })
   }
 
   return (
@@ -66,9 +231,7 @@ export function Profile() {
       >
         <Center mt="$6">
           <UserPhoto
-            source={{
-              uri: 'https://github.com/vander-furtuna.png',
-            }}
+            source={user?.avatar ? { uri: user.avatar } : defaultUserImg}
             alt="Foto de perfil"
             size="xl"
           />
@@ -87,8 +250,35 @@ export function Profile() {
         </Center>
 
         <Center w="$full" gap="$4">
-          <Input placeholder="Nome" bg="$gray600" />
-          <Input placeholder="Email" bg="$gray600" isReadyOnly />
+          <Controller
+            control={control}
+            name="name"
+            render={({ field: { onChange, value }, fieldState: { error } }) => (
+              <Input
+                bg="$gray600"
+                placeholder="Nome"
+                onChangeText={onChange}
+                value={value}
+                error={error?.message}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, value }, fieldState: { error } }) => (
+              <Input
+                bg="$gray600"
+                placeholder="E-mail"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onChangeText={onChange}
+                isReadyOnly={true}
+                value={value}
+                error={error?.message}
+              />
+            )}
+          />
         </Center>
 
         <Heading
@@ -103,14 +293,55 @@ export function Profile() {
         </Heading>
 
         <Center w="$full" gap="$4">
-          <Input placeholder="Senha antiga" bg="$gray600" secureTextEntry />
-          <Input placeholder="Nova senha" bg="$gray600" secureTextEntry />
-          <Input
-            placeholder="Confirme a nova senha"
-            bg="$gray600"
-            secureTextEntry
+          <Controller
+            control={control}
+            name="oldPassword"
+            render={({ field: { onChange, value }, fieldState: { error } }) => (
+              <Input
+                bg="$gray600"
+                placeholder="Senha Antiga"
+                secureTextEntry
+                onChangeText={onChange}
+                value={value}
+                error={error?.message}
+              />
+            )}
           />
-          <Button label="Atualizar" />
+          <Controller
+            control={control}
+            name="newPassword"
+            render={({ field: { onChange, value }, fieldState: { error } }) => (
+              <Input
+                bg="$gray600"
+                placeholder="Senha"
+                secureTextEntry
+                onChangeText={onChange}
+                value={value}
+                error={error?.message}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="newPasswordConfirmation"
+            render={({ field: { onChange, value }, fieldState: { error } }) => (
+              <Input
+                bg="$gray600"
+                placeholder="Confime sua nova senha"
+                secureTextEntry
+                onChangeText={onChange}
+                value={value}
+                onSubmitEditing={handleSubmit(handleProfileUpdate)}
+                returnKeyType="send"
+                error={error?.message}
+              />
+            )}
+          />
+          <Button
+            label="Atualizar"
+            isLoading={isPending}
+            onPress={handleSubmit(handleProfileUpdate)}
+          />
         </Center>
       </ScrollView>
     </VStack>

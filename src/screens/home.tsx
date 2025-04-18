@@ -1,83 +1,48 @@
 import { ExerciseCard } from '@components/exercise-card'
 import { Group } from '@components/group'
 import { HomeHeader } from '@components/home-header'
+import { Loading } from '@components/loading'
 import { Heading, HStack, Text, VStack } from '@gluestack-ui/themed'
 import { useNavigation } from '@react-navigation/native'
 import type { AppNavigatorRoutesProps } from '@routes/app.routes'
-import { useState } from 'react'
+import { getExercisesByGroup } from '@services/exercises/get-exercises-by-group'
+import { getGroups } from '@services/groups/get-groups'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { FlatList } from 'react-native'
 
-const GROUPS = [
-  'Costas',
-  'Pernas',
-  'Peito',
-  'Ombros',
-  'Bíceps',
-  'Tríceps',
-  'Abdômen',
-]
-
-const EXERCISES = [
-  {
-    id: '1',
-    name: 'Supino reto',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-  {
-    id: '2',
-    name: 'Puxada frontal',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-  {
-    id: '3',
-    name: 'Agachamento',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-  {
-    id: '4',
-    name: 'Rosca direta',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-  {
-    id: '5',
-    name: 'Tríceps testa',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-  {
-    id: '6',
-    name: 'Abdominal infra',
-    image:
-      'https://conteudo.imguol.com.br/c/entretenimento/df/2017/07/19/homem-na-academia-homem-fazendo-musculacao-1500511253956_v2_1920x1280.jpg',
-    series: '3 séries x 10 repetições',
-  },
-]
-
 export function Home() {
-  // const [groups, setGroups] = useState(GROUPS)
-  const [groupSelected, setGroupSelected] = useState('Costas')
+  const { data: groups } = useQuery({
+    queryKey: ['groups'],
+    queryFn: () => getGroups(),
+  })
+
+  const [groupSelected, setGroupSelected] = useState<null | string>(null)
+
+  const { data: exercises, isFetching: isExercisesFetching } = useQuery({
+    queryKey: ['exercises', groupSelected],
+    queryFn: () => getExercisesByGroup(groupSelected!),
+    enabled: !!groupSelected,
+  })
 
   const navigation = useNavigation<AppNavigatorRoutesProps>()
 
-  function handleOpenExerciseDetails() {
-    navigation.navigate('exercise')
+  function handleOpenExerciseDetails(exerciseId: number) {
+    navigation.navigate('exercise', { exerciseId })
   }
+
+  useEffect(() => {
+    if (groups && groups.length) {
+      setGroupSelected(groups?.[0])
+    }
+  }, [groups])
 
   return (
     <VStack flex={1}>
       <HomeHeader />
 
       <FlatList
-        data={GROUPS}
+        data={groups}
         keyExtractor={(item) => item}
         renderItem={({ item }) => (
           <Group
@@ -99,18 +64,25 @@ export function Home() {
           </Heading>
 
           <Text color="$gray200" fontSize="$md" fontFamily="$body">
-            {EXERCISES.length}
+            {exercises?.length}
           </Text>
         </HStack>
-        <FlatList
-          data={EXERCISES}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ExerciseCard onPress={handleOpenExerciseDetails} />
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
+        {isExercisesFetching ? (
+          <Loading />
+        ) : (
+          <FlatList
+            data={exercises}
+            keyExtractor={(exercise) => String(exercise.id)}
+            renderItem={({ item: exercise }) => (
+              <ExerciseCard
+                exercise={exercise}
+                onPress={() => handleOpenExerciseDetails(exercise.id)}
+              />
+            )}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+          />
+        )}
       </VStack>
     </VStack>
   )

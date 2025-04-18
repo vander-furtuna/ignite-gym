@@ -1,4 +1,5 @@
 import { Loading } from '@components/loading'
+import { AuthProvider } from '@contexts/auth'
 import {
   Roboto_400Regular,
   Roboto_700Bold,
@@ -6,6 +7,8 @@ import {
 } from '@expo-google-fonts/roboto'
 import { GluestackUIProvider } from '@gluestack-ui/themed'
 import { Routes } from '@routes/index'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from '@utils/query-client'
 import { StatusBar } from 'react-native'
 
 import { config } from './config/gluestack-ui.config'
@@ -23,7 +26,9 @@ export default function App() {
         backgroundColor="transparent"
         translucent
       />
-      {isFontLoaded ? <Routes /> : <Loading />}
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{isFontLoaded ? <Routes /> : <Loading />}</AuthProvider>
+      </QueryClientProvider>
     </GluestackUIProvider>
   )
 }

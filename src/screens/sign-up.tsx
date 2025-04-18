@@ -3,6 +3,7 @@ import Logo from '@assets/logo.svg'
 import { Button } from '@components/button'
 import { Input } from '@components/input'
 import { ToastMessage } from '@components/toast-message'
+import { useAuth } from '@contexts/auth'
 import {
   Center,
   Heading,
@@ -15,7 +16,7 @@ import {
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigation } from '@react-navigation/native'
 import type { AuthNavigatorRoutesProps } from '@routes/auth.routes'
-import { signUp } from '@services/sign-up'
+import { signUp } from '@services/auth/sign-up'
 import { AppError } from '@utils/app-error'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -51,10 +52,12 @@ const signUpFormSchema = z
 type SignUpFormSchema = z.infer<typeof signUpFormSchema>
 
 export function SignUp() {
+  const { onSignIn } = useAuth()
+
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
     reset,
   } = useForm<SignUpFormSchema>({
     resolver: zodResolver(signUpFormSchema),
@@ -71,6 +74,9 @@ export function SignUp() {
         email,
         password,
       })
+
+      await onSignIn({ email, password })
+
       toast.show({
         placement: 'bottom',
         render: ({ id }) => (
@@ -190,6 +196,7 @@ export function SignUp() {
             <Button
               label="Criar e acessar"
               onPress={handleSubmit(handleSignUp)}
+              isLoading={isSubmitting}
             />
           </Center>
           <Center flex={1} justifyContent="flex-end" mt="$4">
